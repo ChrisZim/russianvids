@@ -253,14 +253,17 @@ function startHere(fromStart){
   const sc=$("screen");sc.hidden=false;sc.replaceChildren();$("msg").textContent="Loading…";
   vid=document.createElement("video");vid.controls=true;vid.playsInline=true;vid.preload="metadata";
   vid.style.width="100%";vid.style.height="100%";
-  vid.src=url(d)+(start?`#t=${Math.floor(start)}`:"");
+  vid.setAttribute("referrerpolicy","no-referrer");
+  const srcs=[url(d),"https://archive.org/download/russianvidstrutherconspiracycollection/russianvids/russian%20vids/"+encodeURIComponent(d.f)];let si=0;
+  const frag=start?`#t=${Math.floor(start)}`:"";
+  vid.src=srcs[0]+frag;
   let rate=1;try{rate=+localStorage.getItem("rvplayer.rate")||1}catch(e){}
   vid.addEventListener("loadedmetadata",()=>{if(start&&vid.currentTime<1)vid.currentTime=start;vid.playbackRate=rate;$("speed").textContent=rate+"×";$("msg").textContent="Your place saves automatically."});
   vid.addEventListener("timeupdate",()=>persist(false));
   vid.addEventListener("pause",()=>{persist(true);render()});
   vid.addEventListener("seeked",()=>persist(true));
   vid.addEventListener("ended",()=>{setPos(d,d.s,true);render()});
-  vid.addEventListener("error",()=>{$("msg").textContent="This browser won't play it inside the page. Use Open in phone player, then save your place below.";sc.hidden=true;$("vc").hidden=true;$("saveRow").hidden=false;vid=null});
+  vid.addEventListener("error",()=>{const code=vid.error?vid.error.code:"?";if(++si<srcs.length){$("msg").textContent="Trying another server…";vid.src=srcs[si]+frag;vid.play().catch(()=>{});return}$("msg").textContent=`Couldn't play inside the page (error ${code}). Use Open in phone player, then save your place below.`;sc.hidden=true;$("vc").hidden=true;$("saveRow").hidden=false;vid=null});
   sc.append(vid);$("vc").hidden=false;vid.play().catch(()=>{});
   sc.scrollIntoView({behavior:"smooth",block:"center"});
 }
