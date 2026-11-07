@@ -250,7 +250,7 @@ function persist(force){
 function startHere(fromStart){
   if(!cur)return;const d=cur,p=st(d);const start=!fromStart&&p&&!p.w&&(p.t||0)>5?Math.max(0,p.t-3):0;
   if(vid){vid.pause();vid=null}
-  const sc=$("screen");sc.hidden=false;sc.replaceChildren();$("msg").textContent="Loading…";
+  const sc=$("screen");sc.hidden=false;sc.replaceChildren();
   vid=document.createElement("video");vid.controls=true;vid.playsInline=true;vid.preload="metadata";
   vid.style.width="100%";vid.style.height="100%";
   vid.setAttribute("referrerpolicy","no-referrer");
@@ -258,15 +258,17 @@ function startHere(fromStart){
   const iaF=d.f.replace(/\.mp4$/i,".ia.mp4");
   const srcs=(d.ia?[BASE+encodeURIComponent(iaF),AD+encodeURIComponent(iaF)]:[]).concat([url(d),AD+encodeURIComponent(d.f)]);let si=0;
   const frag=start?`#t=${Math.floor(start)}`:"";
-  vid.src=srcs[0]+frag;
+  let tmr=null;const label=()=>`Loading (server ${si+1} of ${srcs.length})…`;
+  const next=()=>{clearTimeout(tmr);if(!vid)return;if(++si<srcs.length){$("msg").textContent=label();vid.src=srcs[si]+frag;vid.play().catch(()=>{});tmr=setTimeout(next,15000)}else{$("msg").textContent="archive.org isn't sending this video to the page. Use Open in phone player, then save your place below.";$("saveRow").hidden=false}};
+  vid.src=srcs[0]+frag;tmr=setTimeout(next,15000);
   let rate=1;try{rate=+localStorage.getItem("rvplayer.rate")||1}catch(e){}
-  vid.addEventListener("loadedmetadata",()=>{if(start&&vid.currentTime<1)vid.currentTime=start;vid.playbackRate=rate;$("speed").textContent=rate+"×";$("msg").textContent="Your place saves automatically."});
+  vid.addEventListener("loadedmetadata",()=>{clearTimeout(tmr);if(start&&vid.currentTime<1)vid.currentTime=start;vid.playbackRate=rate;$("speed").textContent=rate+"×";$("msg").textContent="Your place saves automatically."});
   vid.addEventListener("timeupdate",()=>persist(false));
   vid.addEventListener("pause",()=>{persist(true);render()});
   vid.addEventListener("seeked",()=>persist(true));
   vid.addEventListener("ended",()=>{setPos(d,d.s,true);render()});
-  vid.addEventListener("error",()=>{const code=vid.error?vid.error.code:"?";if(++si<srcs.length){$("msg").textContent="Trying another server…";vid.src=srcs[si]+frag;vid.play().catch(()=>{});return}$("msg").textContent=`Couldn't play inside the page (error ${code}${d.ia?'':', no browser copy on archive.org'}). Use Open in phone player, then save your place below.`;sc.hidden=true;$("vc").hidden=true;$("saveRow").hidden=false;vid=null});
-  sc.append(vid);$("vc").hidden=false;vid.play().catch(()=>{});
+  vid.addEventListener("error",()=>{const code=vid.error?vid.error.code:"?";if(si+1<srcs.length){next();return}clearTimeout(tmr);$("msg").textContent=`Couldn't play inside the page (error ${code}${d.ia?'':', no browser copy on archive.org'}). Use Open in phone player, then save your place below.`;sc.hidden=true;$("vc").hidden=true;$("saveRow").hidden=false;vid=null});
+  sc.append(vid);$("vc").hidden=false;$("msg").textContent=label();vid.play().catch(()=>{});
   sc.scrollIntoView({behavior:"smooth",block:"center"});
 }
 $("playHere").onclick=()=>startHere(false);
