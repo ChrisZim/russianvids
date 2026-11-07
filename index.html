@@ -72,7 +72,7 @@ a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
 <body>
 <div class="wrap">
   <section class="player" aria-label="Now watching">
-    <div class="card" id="pick">Pick a video from the list. It plays here and saves your place as you watch.</div>
+    <div class="card" id="pick">Pick a video from the list. Play opens it in your phone's player from where you left off. When you come back, your place is saved automatically.</div>
     <div class="card" id="now" hidden>
       <h2 id="nowTitle"></h2>
       <div class="meta"><span id="nowLen"></span><span id="nowState"></span></div>
@@ -84,17 +84,18 @@ a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
         <button class="btn" id="speed" type="button">1&#215;</button>
       </div>
       <div class="controls">
-        <button class="btn primary" id="playHere" type="button">Play</button>
-        <button class="btn" id="playHereStart" type="button">Play from start</button>
+        <a class="btn primary" id="playFrom" target="_blank" rel="noopener">Play</a>
+        <a class="btn" id="playStart" target="_blank" rel="noopener">Play from start</a>
+        <button class="btn" id="playHere" type="button" hidden>Play</button>
+        <button class="btn" id="playHereStart" type="button" hidden>Play from start</button>
       </div>
       <div class="controls">
         <button class="btn" id="markW" type="button">Mark watched</button>
         <button class="btn" id="restart" type="button">Reset progress</button>
-        <a class="btn" id="playFrom" target="_blank" rel="noopener">Open in phone player</a>
-        <a id="playStart" hidden></a>
+
       </div>
-      <div class="saveRow" id="saveRow" hidden>
-        <label for="stopAt">I stopped at</label>
+      <div class="saveRow" id="saveRow">
+        <label for="stopAt">Correct it: I stopped at</label>
         <input id="stopAt" inputmode="decimal" placeholder="e.g. 45:10 or 1:05:30" autocomplete="off">
         <button class="btn primary" id="saveBtn" type="button">Save my place</button>
       </div>
@@ -212,7 +213,7 @@ function showNow(){
   $("nowState").textContent=s==="progress"?`Stopped at ${fmt(p.t)}`:(s==="watched"?"Watched":"Not started");
   $("nowBar").style.width=pct(d)+"%";
   $("playFrom").href=url(d)+(resume?`#t=${resume}`:"");
-  $("playFrom").textContent="Open in phone player";$("playHere").textContent=resume?`Play from ${fmt(resume)}`:"Play";$("playHereStart").hidden=!resume;
+  $("playFrom").textContent=resume?`Play from ${fmt(resume)}`:"Play";
   $("playStart").hidden=!resume;
   $("playStart").href=url(d);
   $("markW").textContent=s==="watched"?"Mark not watched":"Mark watched";
@@ -220,23 +221,34 @@ function showNow(){
 
 function select(d){
   cur=d;$("stopAt").value="";$("msg").textContent="";$("saveRow").classList.remove("ask");
-  if(vid){persist(true);vid.pause();vid=null;$("screen").replaceChildren();$("screen").hidden=true;$("vc").hidden=true}$("saveRow").hidden=true;
+  if(vid){persist(true);vid.pause();vid=null;$("screen").replaceChildren();$("screen").hidden=true;$("vc").hidden=true}
   render();
   if(matchMedia("(max-width:900px)").matches)window.scrollTo({top:0,behavior:"smooth"});
 }
 
-function onPlayClick(){awaitingReturn=true;$("saveRow").hidden=false;$("msg").textContent="When you come back, type where you stopped and tap Save my place."}
+let opened=null;
+function onPlayClick(e){if(!cur)return;const fromStart=e.currentTarget.id==="playStart";const p=st(cur);
+  const start=fromStart?0:(p&&!p.w&&(p.t||0)>5?Math.max(0,Math.floor(p.t)-3):0);
+  opened={d:cur,start,at:Date.now()};try{localStorage.setItem("rvplayer.opened",JSON.stringify({f:cur.f,start,at:opened.at}))}catch(_){}
+  awaitingReturn=true;$("msg").textContent="Watching… your place is saved when you come back to this page."}
 $("playFrom").onclick=onPlayClick;$("playStart").onclick=onPlayClick;
+function onReturn(){
+  if(!opened){try{const o=JSON.parse(localStorage.getItem("rvplayer.opened")||"null");if(o){const d=DATA.find(x=>x.f===o.f);if(d)opened={d,start:o.start,at:o.at}}}catch(_){}}
+  if(!opened)return;const {d,start,at}=opened;opened=null;awaitingReturn=false;try{localStorage.removeItem("rvplayer.opened")}catch(_){}
+  const away=Math.round((Date.now()-at)/1000);if(away<20){if(cur===d)$("msg").textContent="Back already — nothing saved.";return}
+  const est=Math.min(d.s,start+away);setPos(d,est);if(cur!==d)select(d);
+  $("stopAt").value=fmt(est);$("saveRow").classList.add("ask");
+  $("msg").textContent=state(d)==="watched"?`Saved as watched (you were away ${fmt(away)}).`:`Saved at ~${fmt(est)} (started ${fmt(start)}, away ${fmt(away)}). If that's off, fix the time and tap Save my place.`;render()}
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden){if(vid)persist(true);return}
-  if(awaitingReturn&&cur){awaitingReturn=false;$("saveRow").classList.add("ask");$("stopAt").focus()}
+  onReturn();
 });
 $("saveBtn").onclick=()=>{
   if(!cur)return;const t=parseT($("stopAt").value);
   if(t===null){$("msg").textContent="Type the time like 45:10 or 1:05:30.";return}
   if(t>cur.s+5){$("msg").textContent=`That's past the end. This video is ${fmt(cur.s)} long.`;return}
   setPos(cur,t);$("stopAt").value="";$("saveRow").classList.remove("ask");
-  $("msg").textContent=state(cur)==="watched"?"Saved. Marked as watched.":`Saved. Next time it starts from ${fmt(Math.max(0,t-3))}.`;render();
+  $("msg").textContent=state(cur)==="watched"?"Saved. Marked as watched.":`Corrected. Next time it starts from ${fmt(Math.max(0,t-3))}.`;render();
 };
 $("stopAt").addEventListener("keydown",e=>{if(e.key==="Enter")$("saveBtn").click()});
 $("markW").onclick=()=>{if(!cur)return;const w=state(cur)!=="watched";setPos(cur,w?cur.s:0,w);render()};
@@ -278,6 +290,7 @@ $("fwd30").onclick=()=>{if(vid){vid.currentTime=Math.min(vid.duration||1e9,vid.c
 const RATES=[1,1.25,1.5,1.75,2];
 $("speed").onclick=()=>{if(!vid)return;const r=RATES[(RATES.indexOf(vid.playbackRate)+1)%RATES.length]||1;vid.playbackRate=r;$("speed").textContent=r+"×";try{localStorage.setItem("rvplayer.rate",r)}catch(e){}};
 
+setTimeout(onReturn,300);
 ["q","sort","show","hideDup"].forEach(id=>$(id).addEventListener("input",()=>{shown=200;render()}));
 $("exp").onclick=()=>{
   const blob=new Blob([JSON.stringify({app:"rvplayer",saved:new Date().toISOString(),progress:P},null,1)],{type:"application/json"});
